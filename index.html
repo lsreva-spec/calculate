@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>租屋水電費分攤計算機</title>
+<style>
+  body { font-family: "Microsoft JhengHei", sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
+  .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+  h1 { text-align: center; color: #2c3e50; }
+  .section { margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+  
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+  
+  @media (max-width: 600px) {
+    .grid-2, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  label { display: block; font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #555; }
+  input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+  th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+  th { background-color: #3498db; color: white; }
+  tr:nth-child(even) { background-color: #f9f9f9; }
+  .empty-room { color: #999; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>水電費分攤計算機</h1>
+
+  <div class="section">
+    <h3>1. 參數設定區 <span style="font-size: 14px; color: #e74c3c; font-weight: normal;">(若有空房，請記得修改「目前總人數」)</span></h3>
+    <div class="grid">
+      <div><label>1-2樓 帳單總額</label><input type="number" id="bill12" value="522" oninput="calculate()"></div>
+      <div><label>1-2樓 平均單價</label><input type="number" step="0.01" id="price12" value="1.86" oninput="calculate()"></div>
+      <div><label>3-4樓 帳單總額</label><input type="number" id="bill34" value="484" oninput="calculate()"></div>
+      <div><label>3-4樓 平均單價</label><input type="number" step="0.01" id="price34" value="1.83" oninput="calculate()"></div>
+      <div><label>全棟水費總額</label><input type="number" id="waterBill" value="1865" oninput="calculate()"></div>
+      <div><label>目前總人數</label><input type="number" id="totalPeople" value="4" oninput="calculate()"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>2. 個人冷氣度數輸入區<span style="font-size: 14px; color: #7f8c8d; font-weight: normal;">(無人居住請輸入 -1)</span></h3>
+    <div class="grid-2" style="margin-bottom: 15px;">
+      <div><label>2樓前 A 度數</label><input type="number" id="acA" value="16" oninput="calculate()"></div>
+      <div><label>2樓後 B 度數</label><input type="number" id="acB" value="0" oninput="calculate()"></div>
+    </div>
+    <div class="grid-4">
+      <div><label>3樓前 C 度數</label><input type="number" id="acC" value="3" oninput="calculate()"></div>
+      <div><label>3樓後 D 度數</label><input type="number" id="acD" value="0" oninput="calculate()"></div>
+      <div><label>4樓前 E 度數</label><input type="number" id="acE" value="0" oninput="calculate()"></div>
+      <div><label>4樓後 F 度數</label><input type="number" id="acF" value="-1" oninput="calculate()"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>3. 計算結果明細</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>姓名 (樓層)</th>
+          <th>冷氣費</th>
+          <th>樓層公攤</th>
+          <th>一樓公設</th>
+          <th>水費</th>
+          <th>應繳總計</th>
+        </tr>
+      </thead>
+      <tbody id="resultBody">
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function calculate() {
+  // 取得數值
+  let bill12 = parseFloat(document.getElementById('bill12').value) || 0;
+  let price12 = parseFloat(document.getElementById('price12').value) || 0;
+  let bill34 = parseFloat(document.getElementById('bill34').value) || 0;
+  let price34 = parseFloat(document.getElementById('price34').value) || 0;
+  let waterBill = parseFloat(document.getElementById('waterBill').value) || 0;
+  let totalPeople = parseFloat(document.getElementById('totalPeople').value) || 1;
+
+  let acA_raw = parseFloat(document.getElementById('acA').value) || 0;
+  let acB_raw = parseFloat(document.getElementById('acB').value) || 0;
+  let acC_raw = parseFloat(document.getElementById('acC').value) || 0;
+  let acD_raw = parseFloat(document.getElementById('acD').value) || 0;
+  let acE_raw = parseFloat(document.getElementById('acE').value) || 0;
+  let acF_raw = parseFloat(document.getElementById('acF').value) || 0;
+
+  // 判斷是否為空房 (-1)
+  let isEmpty = {
+    A: acA_raw === -1, B: acB_raw === -1,
+    C: acC_raw === -1, D: acD_raw === -1, E: acE_raw === -1, F: acF_raw === -1
+  };
+
+  // 有效度數 (空房視為 0)
+  let acA = isEmpty.A ? 0 : acA_raw;
+  let acB = isEmpty.B ? 0 : acB_raw;
+  let acC = isEmpty.C ? 0 : acC_raw;
+  let acD = isEmpty.D ? 0 : acD_raw;
+  let acE = isEmpty.E ? 0 : acE_raw;
+  let acF = isEmpty.F ? 0 : acF_raw;
+
+  // 計算各樓層實際有住人的人數
+  let activeCount2F = (isEmpty.A ? 0 : 1) + (isEmpty.B ? 0 : 1);
+  let activeCount4F = (isEmpty.C ? 0 : 1) + (isEmpty.D ? 0 : 1) + (isEmpty.E ? 0 : 1) + (isEmpty.F ? 0 : 1);
+
+  if (price12 === 0) price12 = 1;
+  if (totalPeople === 0) totalPeople = 1;
+
+  // 中間邏輯計算
+  let totalAcDegree2F = acA + acB;
+  let totalAcDegree4F = acC + acD + acE + acF;
+
+  // 一樓公設與水費
+  let public1F = (((bill12 / price12) - totalAcDegree2F) / 2) * price12;
+  let public1FPerPerson = public1F / totalPeople;
+  let waterPerPerson = waterBill / totalPeople;
+
+  // 各樓層冷氣總費
+  let totalAcCost2F = totalAcDegree2F * price12;
+  let totalAcCost4F = totalAcDegree4F * price34;
+
+  // 樓層公攤 (總額 / 該樓層非空房人數)
+  let public2FTotal = (bill12 - public1F - totalAcCost2F) / 2; // 2樓的總公攤
+  let public2FShare = activeCount2F > 0 ? (public2FTotal / activeCount2F) : 0; 
+  
+  let public4FTotal = bill34 - totalAcCost4F; // 3-4樓的總公攤
+  let public4FShare = activeCount4F > 0 ? (public4FTotal / activeCount4F) : 0;
+
+  // 房客物件建立
+  const tenants = [
+    { name: '2樓前 A', floor: '2樓', degree: acA, price: price12, floorShare: public2FShare, empty: isEmpty.A },
+    { name: '2樓後 B', floor: '2樓', degree: acB, price: price12, floorShare: public2FShare, empty: isEmpty.B },
+    { name: '3樓前 C', floor: '34樓', degree: acC, price: price34, floorShare: public4FShare, empty: isEmpty.C },
+    { name: '3樓後 D', floor: '34樓', degree: acD, price: price34, floorShare: public4FShare, empty: isEmpty.D },
+    { name: '4樓前 E', floor: '34樓', degree: acE, price: price34, floorShare: public4FShare, empty: isEmpty.E },
+    { name: '4樓後 F', floor: '34樓', degree: acF, price: price34, floorShare: public4FShare, empty: isEmpty.F }
+  ];
+
+  let tbody = document.getElementById('resultBody');
+  tbody.innerHTML = '';
+
+  // 產生表格內容
+  tenants.forEach(t => {
+    if (t.empty) {
+      // 空房直接顯示 0
+      let tr = document.createElement('tr');
+      tr.className = 'empty-room';
+      tr.innerHTML = `
+        <td>${t.name} (${t.floor}) [空房]</td>
+        <td>$0</td>
+        <td>$0</td>
+        <td>$0</td>
+        <td>$0</td>
+        <td>$0</td>
+      `;
+      tbody.appendChild(tr);
+    } else {
+      // 正常計算
+      let acCost = t.degree * t.price;
+      let total = acCost + t.floorShare + public1FPerPerson + waterPerPerson;
+      
+      let tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${t.name} (${t.floor})</td>
+        <td>$${Math.round(acCost)}</td>
+        <td>$${Math.round(t.floorShare)}</td>
+        <td>$${Math.round(public1FPerPerson)}</td>
+        <td>$${Math.round(waterPerPerson)}</td>
+        <td style="font-weight:bold; color:#e74c3c;">$${Math.round(total)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  });
+}
+
+window.onload = calculate;
+</script>
+
+</body>
+</html>
